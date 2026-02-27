@@ -1,7 +1,7 @@
 import Route from '@ember/routing/route';
 import { inject as service } from '@ember/service';
 
-export default class UsersIndexRoute extends Route {
+export default class UsersDriversRoute extends Route {
     @service store;
 
     queryParams = {
@@ -17,6 +17,6 @@ export default class UsersIndexRoute extends Route {
     };
 
     model(params) {
-        return this.store.query('user', { ...params, is_user: 1 });
+        return this.store.query('user', { ...params, is_driver: 1 });
     }
 }

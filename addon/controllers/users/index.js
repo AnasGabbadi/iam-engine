@@ -16,40 +16,55 @@ export default class UsersIndexController extends Controller {
     @service fetch;
     @service abilities;
     @service filters;
+    @service tableContext;
 
-    /**
-     * Queryable parameters for this controller's model
-     *
-     * @var {Array}
-     */
-    queryParams = ['page', 'limit', 'sort', 'query', 'type', 'created_by', 'updated_by', 'status', 'role', 'name'];
+    /** action buttons */
+    get actionButtons() {
+        return [
+            {
+                icon: 'refresh',
+                onClick: () => this.hostRouter.refresh(),
+                helpText: this.intl.t('common.refresh'),
+            },
+            {
+                text: this.intl.t('common.new'),
+                type: 'primary',
+                icon: 'plus',
+                permission: 'iam create user',
+                onClick: this.createUser,
+            },
+            {
+                text: this.intl.t('common.export'),
+                icon: 'long-arrow-up',
+                iconClass: 'rotate-icon-45',
+                wrapperClass: 'hidden md:flex',
+                permission: 'iam export user',
+                onClick: this.exportUsers,
+            },
+        ];
+    }
 
-    /**
-     * The current page of data being viewed
-     *
-     * @var {Integer}
-     */
+    /** bulk actions */
+    get bulkActions() {
+        const selected = this.tableContext.getSelectedRows();
+
+        return [
+            {
+                label: this.intl.t('common.delete-selected-count', { count: selected.length }),
+                class: 'text-red-500',
+                fn: this.bulkDeleteUsers,
+            },
+        ];
+    }
+
+    queryParams = ['page', 'limit', 'sort', 'query', 'type', 'created_by', 'updated_by', 'status', 'role', 'name', 'phone', 'email'];
     @tracked page = 1;
-
-    /**
-     * The maximum number of items to show per page
-     *
-     * @var {Integer}
-     */
     @tracked limit;
-
-    /**
-     * The search query param
-     *
-     * @var {Integer}
-     */
     @tracked query;
-
-    /**
-     * The param to sort the data on, the param with prepended `-` is descending
-     *
-     * @var {String}
-     */
+    @tracked name;
+    @tracked phone;
+    @tracked email;
+    @tracked role;
     @tracked sort = '-created_at';
 
     /**
@@ -59,9 +74,9 @@ export default class UsersIndexController extends Controller {
      */
     @tracked columns = [
         {
+            sticky: true,
             label: this.intl.t('iam.common.name'),
             valuePath: 'name',
-            width: '160px',
             cellComponent: 'table/cell/user-name',
             permission: 'iam view user',
             mediaPath: 'avatar_url',
@@ -72,24 +87,28 @@ export default class UsersIndexController extends Controller {
             filterComponent: 'filter/string',
         },
         {
+            sticky: true,
             label: this.intl.t('iam.common.email'),
             valuePath: 'email',
             cellComponent: 'click-to-copy',
-            sortable: false,
-            width: '12%',
+            resizable: true,
+            sortable: true,
+            filterable: true,
+            filterComponent: 'filter/string',
         },
         {
             label: this.intl.t('iam.common.phone'),
             valuePath: 'phone',
             cellComponent: 'click-to-copy',
-            sortable: false,
-            width: '12%',
+            resizable: true,
+            sortable: true,
+            filterable: true,
+            filterComponent: 'filter/string',
         },
         {
             label: this.intl.t('iam.common.role'),
             valuePath: 'role.name',
             sortable: false,
-            width: '10%',
             filterable: true,
             filterComponent: 'filter/model',
             filterComponentPlaceholder: 'Select role',
@@ -100,17 +119,15 @@ export default class UsersIndexController extends Controller {
             label: this.intl.t('iam.common.status'),
             valuePath: 'session_status',
             sortable: false,
-            width: '12%',
             cellComponent: 'table/cell/status',
             filterable: true,
             filterComponent: 'filter/select',
             filterParam: 'status',
-            filterOptions: ['pending', 'active'],
+            filterOptions: ['pending', 'active', 'inactive'],
         },
         {
             label: this.intl.t('iam.users.index.last-login'),
             valuePath: 'lastLogin',
-            width: '130px',
             resizable: true,
             sortable: false,
             filterable: false,
@@ -120,7 +137,6 @@ export default class UsersIndexController extends Controller {
             label: this.intl.t('iam.users.index.created-at'),
             valuePath: 'createdAt',
             sortParam: 'created_at',
-            width: '140px',
             resizable: true,
             sortable: false,
             filterable: false,
@@ -130,7 +146,6 @@ export default class UsersIndexController extends Controller {
             label: this.intl.t('iam.users.index.updated-at'),
             valuePath: 'updatedAt',
             sortParam: 'updated_at',
-            width: '130px',
             resizable: true,
             hidden: true,
             sortable: false,
@@ -146,7 +161,8 @@ export default class UsersIndexController extends Controller {
             ddMenuLabel: this.intl.t('iam.users.index.user-actions'),
             cellClassNames: 'overflow-visible',
             wrapperClass: 'flex items-center justify-end mx-2',
-            width: '10%',
+            sticky: 'right',
+            width: 60,
             actions: [
                 {
                     label: this.intl.t('iam.users.index.edit-user'),
@@ -324,6 +340,7 @@ export default class UsersIndexController extends Controller {
             acceptButtonIcon: 'save',
             acceptButtonDisabled: this.abilities.cannot(formPermission),
             acceptButtonHelpText: this.abilities.cannot(formPermission) ? this.intl.t('common.unauthorized') : null,
+            keepOpen: true,
             formPermission,
             user,
             uploadNewPhoto: (file) => {
@@ -354,9 +371,16 @@ export default class UsersIndexController extends Controller {
                 try {
                     await user.save();
                     this.notifications.success(this.intl.t('iam.users.index.user-changes-saved-success'));
-                    return this.hostRouter.refresh();
+                    this.hostRouter.refresh();
+                    modal.done();
                 } catch (error) {
                     this.notifications.serverError(error);
+
+                    // If error is because email address was made empty rollback changes
+                    if (error && typeof error.message === 'string' && error.message.includes('Email address cannot be empty')) {
+                        user.rollbackAttributes();
+                    }
+
                     modal.stopLoading();
                 }
             },
@@ -379,6 +403,7 @@ export default class UsersIndexController extends Controller {
             body: this.intl.t('iam.users.index.data-assosciated-user-delete'),
             confirm: async (modal) => {
                 modal.startLoading();
+
                 try {
                     await user.removeFromCurrentCompany();
                     this.notifications.success(this.intl.t('iam.users.index.delete-user-success-message', { userName: user.get('name') }));
@@ -402,6 +427,7 @@ export default class UsersIndexController extends Controller {
             body: this.intl.t('iam.users.index.access-account-or-resources-unless-re-activated'),
             confirm: async (modal) => {
                 modal.startLoading();
+
                 try {
                     await user.deactivate();
                     this.notifications.success(this.intl.t('iam.users.index.deactivate-user-success-message', { userName: user.get('name') }));
@@ -425,6 +451,7 @@ export default class UsersIndexController extends Controller {
             body: this.intl.t('iam.users.index.this-user-will-regain-access-to-your-organization'),
             confirm: async (modal) => {
                 modal.startLoading();
+
                 try {
                     await user.activate();
                     this.notifications.success(this.intl.t('iam.users.index.re-activate-user-success-message', { userName: user.get('name') }));
@@ -448,6 +475,7 @@ export default class UsersIndexController extends Controller {
             body: this.intl.t('iam.users.index.verify-user-manually-prompt'),
             confirm: async (modal) => {
                 modal.startLoading();
+
                 try {
                     await user.verify();
                     this.notifications.success(this.intl.t('iam.users.index.user-verified-success-message', { userName: user.get('name') }));
@@ -483,6 +511,7 @@ export default class UsersIndexController extends Controller {
             body: this.intl.t('iam.users.index.confirming-fleetbase-will-re-send-invitation-for-user-to-join-your-organization'),
             confirm: async (modal) => {
                 modal.startLoading();
+
                 try {
                     await user.resendInvite();
                     this.notifications.success(this.intl.t('iam.users.index.invitation-resent'));
