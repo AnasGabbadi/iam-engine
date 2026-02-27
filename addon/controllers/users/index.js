@@ -340,6 +340,7 @@ export default class UsersIndexController extends Controller {
             acceptButtonIcon: 'save',
             acceptButtonDisabled: this.abilities.cannot(formPermission),
             acceptButtonHelpText: this.abilities.cannot(formPermission) ? this.intl.t('common.unauthorized') : null,
+            keepOpen: true,
             formPermission,
             user,
             uploadNewPhoto: (file) => {
@@ -370,9 +371,16 @@ export default class UsersIndexController extends Controller {
                 try {
                     await user.save();
                     this.notifications.success(this.intl.t('iam.users.index.user-changes-saved-success'));
-                    return this.hostRouter.refresh();
+                    this.hostRouter.refresh();
+                    modal.done();
                 } catch (error) {
                     this.notifications.serverError(error);
+
+                    // If error is because email address was made empty rollback changes
+                    if (error && typeof error.message === 'string' && error.message.includes('Email address cannot be empty')) {
+                        user.rollbackAttributes();
+                    }
+
                     modal.stopLoading();
                 }
             },
@@ -395,6 +403,7 @@ export default class UsersIndexController extends Controller {
             body: this.intl.t('iam.users.index.data-assosciated-user-delete'),
             confirm: async (modal) => {
                 modal.startLoading();
+
                 try {
                     await user.removeFromCurrentCompany();
                     this.notifications.success(this.intl.t('iam.users.index.delete-user-success-message', { userName: user.get('name') }));
@@ -418,6 +427,7 @@ export default class UsersIndexController extends Controller {
             body: this.intl.t('iam.users.index.access-account-or-resources-unless-re-activated'),
             confirm: async (modal) => {
                 modal.startLoading();
+
                 try {
                     await user.deactivate();
                     this.notifications.success(this.intl.t('iam.users.index.deactivate-user-success-message', { userName: user.get('name') }));
@@ -441,6 +451,7 @@ export default class UsersIndexController extends Controller {
             body: this.intl.t('iam.users.index.this-user-will-regain-access-to-your-organization'),
             confirm: async (modal) => {
                 modal.startLoading();
+
                 try {
                     await user.activate();
                     this.notifications.success(this.intl.t('iam.users.index.re-activate-user-success-message', { userName: user.get('name') }));
@@ -464,6 +475,7 @@ export default class UsersIndexController extends Controller {
             body: this.intl.t('iam.users.index.verify-user-manually-prompt'),
             confirm: async (modal) => {
                 modal.startLoading();
+
                 try {
                     await user.verify();
                     this.notifications.success(this.intl.t('iam.users.index.user-verified-success-message', { userName: user.get('name') }));
@@ -499,6 +511,7 @@ export default class UsersIndexController extends Controller {
             body: this.intl.t('iam.users.index.confirming-fleetbase-will-re-send-invitation-for-user-to-join-your-organization'),
             confirm: async (modal) => {
                 modal.startLoading();
+
                 try {
                     await user.resendInvite();
                     this.notifications.success(this.intl.t('iam.users.index.invitation-resent'));
