@@ -6,7 +6,7 @@ export default {
         const widgetService = universe.getService('widget');
 
         // Register in header menu
-        menuService.registerHeaderMenuItem('IAM', 'console.iam', { icon: 'shield-halved', priority: 3 });
+        menuService.registerHeaderMenuItem('Access Management', 'console.iam', { icon: 'shield-halved', priority: 3 });
 
         // register metrics widget
         const widgets = [
